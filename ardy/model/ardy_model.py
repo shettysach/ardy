@@ -511,3 +511,89 @@ class Ardy(nn.Module):
         motion_pred = motion_output[:, :num_frames]
 
         return motion_pred
+
+    def autoregressive_step(
+        self,
+        num_frames: int,
+        num_denoising_steps: int,
+        motion_mask: torch.Tensor | None,
+        observed_motion: torch.Tensor | None,
+        text_feat: torch.Tensor,
+        text_pad_mask: torch.Tensor,
+        cfg_weight: Optional[float] = 2.0,
+        init_history_sequence: Optional[torch.Tensor] = None,
+        init_global_translation: Optional[torch.Tensor] = None,
+        init_first_heading_angle: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """Generate one ARDY motion window from optional ARDY motion history.
+
+        This lower-level helper is useful to callers that maintain an explicit
+        ARDY motion-representation history. For ordinary requests, use
+        :meth:`__call__`, which handles the complete autoregressive sequence.
+        """
+        batch_size = text_feat.shape[0]
+        num_frames_per_token = self.num_frames_per_token
+        gen_horizon_len = self.gen_horizon_len
+        assert num_frames % num_frames_per_token == 0, "num_frames should be a multiple of num_frames_per_token"
+
+        indices = list(range(num_denoising_steps))[::-1]
+        num_denoising_steps_tensor = torch.tensor([num_denoising_steps], device=self.device)
+        use_timesteps = self.diffusion.space_timesteps(num_denoising_steps_tensor[0])[0]
+        self.diffusion.calc_diffusion_vars(use_timesteps)
+
+        init_history_len = 0 if init_history_sequence is None else init_history_sequence.shape[1]
+        if init_history_sequence is not None:
+            history_sequence, global_transl, first_heading_angle = self._encode_init_history(
+                init_history_sequence, batch_size
+            )
+        else:
+            history_sequence = None
+            global_transl = (
+                init_global_translation
+                if init_global_translation is not None
+                else torch.zeros(
+                    (batch_size, self.motion_rep.nfeats_dict["root_pos"]),
+                    device=self.device,
+                )
+            )
+            first_heading_angle = (
+                init_first_heading_angle
+                if init_first_heading_angle is not None
+                else torch.zeros(batch_size, device=self.device)
+            )
+
+        history_sequence = self._generate_window(
+            history_sequence,
+            global_transl,
+            0,
+            init_history_len,
+            num_frames,
+            text_feat,
+            text_pad_mask,
+            first_heading_angle,
+            motion_mask,
+            observed_motion,
+            num_denoising_steps_tensor,
+            cfg_weight,
+            indices,
+            progress_bar=lambda iterable: iterable,
+        )
+
+        root_motion, latent_body_motion = self.hybrid.get_root_and_latent_body_motion_from_hybrid(history_sequence)
+        new_root_motion = translate_normalized_root_motion(root_motion, global_transl, self.motion_rep)
+        if self.autoencoder.encode_with_quantization:
+            latent_body_motion = self.autoencoder.requantize(latent_body_motion)
+        history_sequence = self.hybrid.get_hybrid_motion_from_root_and_latent_body_motion(
+            new_root_motion,
+            latent_body_motion,
+        )
+
+        generated_motion_len = init_history_len + gen_horizon_len
+        motion_pad_mask = torch.ones(batch_size, generated_motion_len, device=self.device, dtype=torch.bool)
+        motion_len = torch.ones(batch_size, device=self.device, dtype=torch.long) * generated_motion_len
+        return self.hybrid.get_explicit_motion_from_hybrid(
+            history_sequence,
+            motion_pad_mask,
+            motion_len,
+            motion_mask=motion_mask,
+        )
