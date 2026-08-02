@@ -1,8 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import logging
-from typing import Any, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -12,8 +11,6 @@ from tqdm.auto import tqdm
 from ardy.model.cfg import AutoLatentClassifierFreeGuidedModel
 from ardy.model.diffusion import DDIMSampler, Diffusion
 from ardy.model.latent_utils import HybridMotionConverter
-
-log = logging.getLogger(__name__)
 
 
 def get_three_mask_from_len(history_len, generation_len, future_len, num_frames, device):
@@ -47,7 +44,6 @@ class Ardy(nn.Module):
         autoencoder: nn.Module,
         gen_horizon_len: int,
         num_base_steps: int,
-        text_encoder: Optional[Any],
         device: Optional[Union[str, torch.device]] = None,
         cfg_type: Optional[str] = "regular",
     ):
@@ -66,7 +62,6 @@ class Ardy(nn.Module):
 
         self.diffusion = Diffusion(num_base_steps=num_base_steps)
         self.sampler = DDIMSampler(self.diffusion)
-        self.text_encoder = text_encoder
         self.hybrid = HybridMotionConverter.from_model(self)
 
         self.num_frames_per_token = self.autoencoder.num_frames_per_token
@@ -102,8 +97,6 @@ class Ardy(nn.Module):
         observed_motion: torch.Tensor,
         num_denoising_steps: torch.Tensor,
         cfg_weight: Union[float, Tuple[float, float]],
-        target_motion: Optional[torch.Tensor] = None,
-        cfg_type: Optional[str] = None,
     ) -> torch.Tensor:
         """Single denoising step.
 
@@ -166,24 +159,6 @@ class Ardy(nn.Module):
         xm1 = x.clone()
         xm1[generation_token_mask] = generation_token_tm1.reshape(-1, num_token_dim)
         return xm1
-
-    def _encode_text(self, texts: List[str]) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Encode text prompts into features and a padding mask."""
-        device = self.device
-        log.info("Encoding text...")
-        text_feat, text_length = self.text_encoder(texts)
-        text_feat = text_feat.to(device)
-
-        # handle empty string (set to zero)
-        empty_text_mask = [len(text.strip()) == 0 for text in texts]
-        text_feat[empty_text_mask] = 0
-
-        # Create the pad mask for the text
-        batch_size, maxlen = text_feat.shape[:2]
-        tensor_text_length = torch.tensor(text_length, device=device)
-        tensor_text_length[empty_text_mask] = 0
-        text_pad_mask = torch.arange(maxlen, device=device).expand(batch_size, maxlen) < tensor_text_length[:, None]
-        return text_feat, text_pad_mask
 
     def _recenter_history(
         self,
@@ -265,8 +240,6 @@ class Ardy(nn.Module):
         cfg_weight: Union[float, Tuple[float, float]],
         indices: List[int],
         progress_bar=tqdm,
-        target_motion: Optional[torch.Tensor] = None,
-        cfg_type: Optional[str] = None,
     ) -> torch.Tensor:
         """Generate a single window of ``gen_horizon_len`` frames.
 
@@ -365,8 +338,6 @@ class Ardy(nn.Module):
                     cur_observed_motion,
                     num_denoising_steps,
                     cfg_weight,
-                    target_motion,
-                    cfg_type=cfg_type,
                 )
 
         #  update the full history sequence
@@ -384,32 +355,21 @@ class Ardy(nn.Module):
 
     def __call__(
         self,
-        texts: List[str],
         num_frames: int,
         num_denoising_steps: int,
         pad_mask: torch.Tensor,
         first_heading_angle: Optional[torch.Tensor],
         motion_mask: torch.Tensor,
         observed_motion: torch.Tensor,
-        target_motion: Optional[torch.Tensor] = None,
+        *,
+        text_feat: torch.Tensor,
+        text_pad_mask: torch.Tensor,
         cfg_weight: Optional[float] = 2.0,
-        text_feat: Optional[torch.Tensor] = None,
-        text_pad_mask: Optional[torch.Tensor] = None,
-        cfg_type: Optional[str] = None,
         progress_bar=tqdm,
-        return_text_embeddings_x_dict: bool = False,
         crop_history_length: Optional[int] = None,
         init_history_sequence: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        """Sample full denoising loop.
-
-        Args:
-            texts (List[str]): batch of text prompts to use for sampling (if text_feat is not passed in)
-        """
-        if text_feat is None:
-            assert text_pad_mask is None
-            text_feat, text_pad_mask = self._encode_text(texts)
-
+        """Sample full denoising loop from checkpoint-specific text features."""
         batch_size = text_feat.shape[0]
         num_frames_per_token = self.num_frames_per_token
         motion_pad_mask = pad_mask
@@ -502,8 +462,6 @@ class Ardy(nn.Module):
                 cfg_weight,
                 indices,
                 progress_bar=progress_bar,
-                target_motion=target_motion,
-                cfg_type=cfg_type,
             )
 
             #  recenter the history sequence as specified
@@ -552,111 +510,4 @@ class Ardy(nn.Module):
             )
         motion_pred = motion_output[:, :num_frames]
 
-        if return_text_embeddings_x_dict:
-            x_dict = {"x": text_feat, "mask": text_pad_mask}
-            return motion_pred, x_dict
         return motion_pred
-
-    def autoregressive_step(
-        self,
-        num_frames: int,
-        num_denoising_steps: int,
-        motion_mask: torch.Tensor | None,
-        observed_motion: torch.Tensor | None,
-        cfg_weight: Optional[float] = 2.0,
-        texts: Optional[List[str]] = None,
-        text_feat: Optional[torch.Tensor] = None,
-        text_pad_mask: Optional[torch.Tensor] = None,
-        init_history_sequence: Optional[torch.Tensor] = None,
-        init_global_translation: Optional[torch.Tensor] = None,  # [B, 3]
-        init_first_heading_angle: Optional[torch.Tensor] = None,  # [B,]
-    ) -> torch.Tensor:
-        """Perform a single autoregressive generation step.
-
-        Returns:
-            torch.Tensor: motions in the generated window
-        """
-        # Encode text if not provided
-        if text_feat is None:
-            assert text_pad_mask is None
-            text_feat, text_pad_mask = self._encode_text(texts)
-
-        batch_size = text_feat.shape[0]
-        num_frames_per_token = self.num_frames_per_token
-        gen_horizon_len = self.gen_horizon_len
-
-        assert num_frames % num_frames_per_token == 0, "num_frames should be a multiple of num_frames_per_token"
-
-        # Init diffusion with correct num steps
-        indices = list(range(num_denoising_steps))[::-1]
-        num_denoising_steps_tensor = torch.tensor([num_denoising_steps], device=self.device)
-        use_timesteps = self.diffusion.space_timesteps(num_denoising_steps_tensor[0])[0]
-        self.diffusion.calc_diffusion_vars(use_timesteps)
-
-        # process init history sequence
-        init_history_len = 0 if init_history_sequence is None else init_history_sequence.shape[1]
-        if init_history_sequence is not None:
-            history_sequence, global_transl, first_heading_angle = self._encode_init_history(
-                init_history_sequence, batch_size
-            )
-        else:
-            history_sequence = None
-            global_transl = (
-                init_global_translation
-                if init_global_translation is not None
-                else torch.zeros(
-                    (batch_size, self.motion_rep.nfeats_dict["root_pos"]),
-                    device=self.device,
-                )
-            )
-            first_heading_angle = (
-                init_first_heading_angle
-                if init_first_heading_angle is not None
-                else torch.zeros(batch_size, device=self.device)
-            )
-
-        # Generate a single window on top of the (optional) history.
-        history_end_frame = init_history_len
-        history_start_frame = 0
-        history_sequence = self._generate_window(
-            history_sequence,
-            global_transl,
-            history_start_frame,
-            history_end_frame,
-            num_frames,
-            text_feat,
-            text_pad_mask,
-            first_heading_angle,
-            motion_mask,
-            observed_motion,
-            num_denoising_steps_tensor,
-            cfg_weight,
-            indices,
-            progress_bar=lambda iterable: iterable,
-            target_motion=None,
-            cfg_type=None,
-        )
-
-        root_motion, latent_body_motion = self.hybrid.get_root_and_latent_body_motion_from_hybrid(history_sequence)
-        new_root_motion = translate_normalized_root_motion(root_motion, global_transl, self.motion_rep)
-        # Quantize the latent body motion if the autoencoder uses quantization
-        if self.autoencoder.encode_with_quantization:
-            latent_body_motion = self.autoencoder.requantize(latent_body_motion)
-        # Combine back to hybrid motion
-        history_sequence = self.hybrid.get_hybrid_motion_from_root_and_latent_body_motion(
-            new_root_motion,
-            latent_body_motion,
-        )
-
-        generated_motion_len = init_history_len + gen_horizon_len
-        motion_pad_mask = torch.ones(batch_size, generated_motion_len, device=self.device, dtype=torch.bool)
-        motion_len = (
-            torch.ones(batch_size, device=self.device, dtype=torch.long) * generated_motion_len
-        )  # length of generated motions
-        motion_output = self.hybrid.get_explicit_motion_from_hybrid(
-            history_sequence,
-            motion_pad_mask,
-            motion_len,
-            motion_mask=motion_mask,
-        )
-        return motion_output

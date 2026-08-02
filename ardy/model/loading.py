@@ -11,14 +11,7 @@ from hydra.utils import instantiate
 from omegaconf import OmegaConf
 from safetensors.torch import load_file as load_safetensors
 
-from .registry import (
-    ARDY_MODELS,
-    AVAILABLE_MODELS,
-    DEFAULT_MODEL,
-    DEFAULT_TEXT_ENCODER_URL,
-    MODEL_NAMES,
-    TMR_MODELS,
-)
+from .registry import DEFAULT_MODEL
 
 
 def get_env_var(name: str, default: Optional[str] = None) -> Optional[str]:
@@ -69,13 +62,8 @@ def load_checkpoint_state_dict(ckpt_path: Union[str, Path]) -> dict:
 
 
 __all__ = [
+    "DEFAULT_MODEL",
     "get_env_var",
     "instantiate_from_dict",
-    "ARDY_MODELS",
-    "TMR_MODELS",
-    "AVAILABLE_MODELS",
-    "MODEL_NAMES",
-    "DEFAULT_MODEL",
-    "DEFAULT_TEXT_ENCODER_URL",
     "load_checkpoint_state_dict",
 ]

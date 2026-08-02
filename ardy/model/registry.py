@@ -12,7 +12,6 @@ Released models are organized by skeleton and generation horizon (in frames).
 """
 
 import os
-import re
 
 # skeleton -> generation horizon (frames) -> released folder name
 MODELS_BY_SKELETON = {
@@ -34,39 +33,11 @@ MODELS = {
 MODELS.update({skeleton: MODELS_BY_SKELETON[skeleton][DEFAULT_HORIZON[skeleton]] for skeleton in MODELS_BY_SKELETON})
 
 DEFAULT_MODEL = "g1"
-DEFAULT_TEXT_ENCODER_URL = "http://127.0.0.1:9550/"
-
-# --- Aliases kept for imports elsewhere (ardy.model.loading re-exports these) --
-# Kept as a public alias for callers that use the upstream registry API.
-MODEL_NAMES = dict(MODELS)
-# a modelname is valid if it is a nickname or a full folder name
-AVAILABLE_MODELS = list(MODELS) + list(dict.fromkeys(MODELS.values()))
-ARDY_MODELS = list(MODELS)
-TMR_MODELS: list[str] = []
-
-# Released-style G1 folder name.
-_NAME_PATTERN = re.compile(r"ardy-(g1)-.*horizon(\d+)$", re.IGNORECASE)
-
-
-def parse_model_name(folder: str):
-    """``(skeleton, horizon)`` parsed from a released-style folder name.
-
-    Returns e.g. ``("g1", 52)`` for ``"ARDY-G1-RP-25FPS-Horizon52"`` (case-insensitive), or
-    ``None`` when the name does not follow the released naming scheme (e.g. a local training-run
-    folder).
-    """
-    m = _NAME_PATTERN.match(folder)
-    if not m:
-        return None
-    return m.group(1).lower(), int(m.group(2))
-
-
-def resolve_model_name(name: str, default_family=None, checkpoints_dir=None) -> str:
+def resolve_model_name(name: str, checkpoints_dir=None) -> str:
     """Return the released folder / repo name for a nickname or full name.
 
     Accepts a nickname (``"g1"``, ``"g18"``, or ``"g152"``), the full G1
-    folder name (case-insensitive). ``default_family`` is ignored (kept for
-    call-site compatibility).
+    folder name (case-insensitive).
 
     When ``checkpoints_dir`` is given, the valid model set is whatever folders live there — not just
     the released models — so a name matching a folder in it is accepted as-is (nicknames still

@@ -19,17 +19,12 @@ dependencies = [
   "scipy>=1.18",
   # Inference stack
   "torch>=2.7.0",
-  # NOTE: the vendored ardy/model/llm2vec has only been tested with transformers==5.8.1
-  "transformers==5.8.1",
-  "peft>=0.19",
   "einops>=0.7",
   # Keep the upstream-tested 1.25 API while dependency compatibility is being
   # changed independently of the inference implementation.
   "vector-quantize-pytorch>=1.25,<1.26",
   # Checkpoint loading
   "safetensors>=0.4",
-  # Client for an existing standalone text-encoder service.
-  "gradio_client>=2.0",
   # Misc
   "tqdm>=4.0",
   "packaging>=21.0",
@@ -53,5 +48,5 @@ extend-select = ["I001"]  # Enable import sorting
 
 [tool.ruff.lint.isort]
 known-first-party = ["ardy"]
-known-third-party = ["torch", "numpy", "transformers", "tqdm"]
+known-third-party = ["torch", "numpy", "tqdm"]
 force-sort-within-sections = false

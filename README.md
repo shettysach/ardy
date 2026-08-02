@@ -1,15 +1,15 @@
 # ARDY G1 inference runtime
 
-This repository is a trimmed fork of NVIDIA ARDY containing the runtime needed
-for text-conditioned Unitree G1 motion generation. Training, datasets,
-evaluation, visualization, interactive demos, TensorRT/ONNX export, and the
-MotionCorrection native extension have been removed.
+Trimmed fork of NVIDIA ARDY containing the runtime needed
+for embedding-conditioned Unitree G1 motion generation. Training, datasets,
+evaluation, visualization, interactive demos, text encoding, TensorRT/ONNX
+export, and the MotionCorrection native extension have been removed.
 
 The preserved inference path is:
 
 ```text
 G1 checkpoint config and weights
-    -> ARDY model loading and text conditioning
+    -> checkpoint-compatible text conditioning [B, 1, 4096]
     -> autoregressive diffusion sampling
     -> ARDY motion-representation decoding
     -> MuJoCo G1 qpos [T, 36]
@@ -17,7 +17,7 @@ G1 checkpoint config and weights
 
 ## Setup
 
-ARDY requires Python 3.10 or newer, NumPy 2.4, and PyTorch 2.7 or newer. Install
+Requires Python 3.10 or newer, NumPy 2.4, and PyTorch 2.7 or newer. Install
 a PyTorch build appropriate for the machine first, then install this repository:
 
 ```bash
@@ -25,16 +25,16 @@ pip install torch
 pip install -e .
 ```
 
-Local text encoding uses the gated Meta Llama 3 model through the upstream
-LLM2Vec path. Request access to `meta-llama/Meta-Llama-3-8B-Instruct` and
-authenticate with Hugging Face before the first run. The existing
-`TEXT_ENCODER_MODE`, `TEXT_ENCODER_URL`, `TEXT_ENCODER_DEVICE`,
-`TEXT_ENCODERS_DIR`, and `HUGGINGFACE_CACHE_DIR` environment variables remain
-supported.
+This fork does not understand text and contains no text encoder. Its released G1
+checkpoint requires the pooled LLM2Vec representation it was trained on:
+`text_feat` is floating-point `[B, 1, 4096]` and `text_pad_mask` is boolean
+`[B, 1]`. Supply these from the separate encoder service as an NPZ with those
+two keys. Other embedding models cannot be substituted merely by matching the
+shape.
 
-G1 checkpoints must be supplied locally; ARDY does not download them at
+G1 checkpoints must be supplied locally; This fork does not download them at
 runtime. Place the released folder below a checkpoint directory and pass
-`--checkpoints_dir` (or set `CHECKPOINTS_DIR`):
+`--checkpoints-dir` (or set `CHECKPOINTS_DIR`):
 
 ```text
 checkpoints/
@@ -47,14 +47,14 @@ checkpoints/
 
 ## Inference example
 
-The retained upstream command-line example generates an NPZ motion file and a
-MuJoCo qpos CSV:
+The retained command-line example consumes a compatible encoder-service NPZ and
+generates an NPZ motion file and a MuJoCo qpos CSV:
 
 ```bash
 python scripts/generate.py \
-  "A person walks forward." \
+  --conditioning /path/to/conditioning.npz \
   --model g1 \
-  --checkpoints_dir /path/to/checkpoints \
+  --checkpoints-dir /path/to/checkpoints \
   --duration 5 \
   --output walk
 ```
@@ -68,7 +68,7 @@ controls how much generated history is supplied to each subsequent window.
 
 ## Runtime tree
 
-- `ardy/model/`: checkpoint loading, text encoding, model definitions, and
+- `ardy/model/`: checkpoint loading, model definitions, and
   diffusion/autoregressive sampling.
 - `ardy/motion_rep/`: normalization, representation transforms, and decoding.
 - `ardy/skeleton/`: shared skeleton primitives and the G1 definition.
