@@ -10,7 +10,6 @@ from .definitions import (
     SOMASkeleton77,
 )
 from .kinematics import batch_rigid_transform, fk
-from .registry import build_skeleton
 from .transforms import global_rots_to_local_rots, to_standard_tpose
 
 __all__ = [
@@ -21,7 +20,6 @@ __all__ = [
     "CoreSkeleton27",
     "batch_rigid_transform",
     "fk",
-    "build_skeleton",
     "global_rots_to_local_rots",
     "to_standard_tpose",
 ]

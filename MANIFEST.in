@@ -1,4 +1,1 @@
-include setup.py
 recursive-include ardy/assets *
-recursive-include MotionCorrection/src *.cpp *.h *.inl
-include MotionCorrection/CMakeLists.txt

@@ -112,9 +112,9 @@ def load_text_encoder(
 ):
     """Select and instantiate a text encoder, ready for inference.
 
-    This is the single place that owns text-encoder selection + instantiation,
-    so it can be built once and reused across multiple models (e.g. core / g1 /
-    soma) by passing the result into ``load_model(..., text_encoder=...)``.
+    This is the single place that owns text-encoder selection and
+    instantiation. A built encoder can be reused across G1 model loads by
+    passing it into ``load_model(..., text_encoder=...)``.
 
     Args:
         mode: Backend selection ("auto"/"api"/"local"). When None, falls back
@@ -170,8 +170,8 @@ def load_model(
 ):
     """Load a released Ardy model.
 
-    ``modelname`` may be a short key ("core"/"g1"/"soma") or a full folder name
-    ("Ardy-Core-RP-20FPS-Horizon40"). If a local checkpoints dir is given (via
+    ``modelname`` may be a G1 nickname or a full G1 checkpoint folder name. If
+    a local checkpoints dir is given (via
     ``checkpoints_dir`` or the ``CHECKPOINTS_DIR`` env var) the model is loaded
     from ``<checkpoints_dir>/<full_name>``; otherwise it is downloaded from HF.
 
@@ -206,8 +206,8 @@ def load_model(
 
     # Local dir if CHECKPOINTS_DIR is set (arg or env), otherwise download from HF.
     checkpoints_dir = checkpoints_dir or get_env_var("CHECKPOINTS_DIR")
-    # Resolve after checkpoints_dir so local-only folders (beyond the three
-    # released models) are accepted when loading from a local dir.
+    # Resolve after checkpoints_dir so local-only folders are accepted when
+    # loading from a local dir.
     full_name = resolve_model_name(modelname, checkpoints_dir=checkpoints_dir)
     if checkpoints_dir:
         model_path = Path(checkpoints_dir) / full_name

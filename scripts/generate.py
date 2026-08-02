@@ -6,8 +6,6 @@
 Generated files are written under outputs/ unless --output contains a path.
 
 Examples:
-    python scripts/generate.py "A person walks in a circle." --checkpoints_dir checkpoints
-    python scripts/generate.py "A person jumps." --model soma --num_samples 4 --seed 0 --output jump
     python scripts/generate.py "A person walks forward." --model g1 --duration 8.0
 """
 
@@ -17,13 +15,10 @@ import os
 import numpy as np
 import torch
 
-from ardy.constraints import load_constraints_lst
 from ardy.model import DEFAULT_MODEL, load_model
 from ardy.model.loading import get_env_var
 from ardy.model.registry import resolve_model_name
 from ardy.motion_rep.tools import length_to_mask
-from ardy.postprocess import post_process_motion
-from ardy.skeleton import SOMASkeleton30
 from ardy.tools import seed_everything, to_numpy
 
 
@@ -38,7 +33,7 @@ def parse_args():
         "--model",
         type=str,
         default=DEFAULT_MODEL,
-        help="Model nickname (core/g1/soma, optionally with horizon like core8) or full folder name.",
+        help="G1 model nickname (g1/g18/g152) or full folder name.",
     )
     parser.add_argument(
         "--duration",
@@ -59,12 +54,6 @@ def parse_args():
         help="Number of diffusion steps, at most the model's schedule length (num_base_steps, the default).",
     )
     parser.add_argument(
-        "--constraints",
-        type=str,
-        default=None,
-        help="Saved constraint list",
-    )
-    parser.add_argument(
         "--output",
         type=str,
         default="output",
@@ -75,11 +64,6 @@ def parse_args():
         type=int,
         default=None,
         help="History frames visible to each autoregressive step (multiple of the model's token size). Default: the longest history that fits the model's trained 10s window; smaller values adapt faster but transition more abruptly.",
-    )
-    parser.add_argument(
-        "--no-postprocess",
-        action="store_true",
-        help="Don't apply motion post-processing to reduce foot skating (ignored for G1)",
     )
     parser.add_argument(
         "--seed",
@@ -212,23 +196,6 @@ def main():
         raise ValueError(f"--history_frames must be a positive multiple of {patch} (this model's token size).")
     print(f"Using {history_frames} history frames per autoregressive step")
 
-    # Load constraints
-    if args.constraints:
-        constraint_lst = load_constraints_lst(args.constraints, model.skeleton)
-    else:
-        constraint_lst = []
-
-    if constraint_lst:
-        print(f"Using {len(constraint_lst)} set of constraints")
-        for constraint in constraint_lst:
-            print(f"    {type(constraint).__name__} on frames {constraint.frame_indices.tolist()}")
-        max_frame_idx = max(int(c.frame_indices.max()) for c in constraint_lst)
-        if max_frame_idx >= num_frames:
-            raise ValueError(
-                f"Constraint frame index {max_frame_idx} exceeds the motion length "
-                f"({num_frames} frames = {args.duration}s at {fps} fps); increase --duration."
-            )
-
     if args.seed is not None:
         seed_everything(args.seed)
 
@@ -239,15 +206,6 @@ def main():
     pad_mask = length_to_mask(lengths)
     first_heading_angle = torch.zeros(num_samples, device=device)  # facing +Z
 
-    observed_motion, motion_mask = None, None
-    if constraint_lst:
-        observed_motion, motion_mask = model.motion_rep.create_conditions_from_constraints_batched(
-            constraint_lst,
-            lengths,
-            to_normalize=True,
-            device=device,
-        )
-
     with torch.no_grad():
         motion = model(
             texts,
@@ -255,28 +213,12 @@ def main():
             num_denoising_steps=diffusion_steps,
             pad_mask=pad_mask,
             first_heading_angle=first_heading_angle,
-            motion_mask=motion_mask,
-            observed_motion=observed_motion,
+            motion_mask=None,
+            observed_motion=None,
             cfg_weight=cfg_weight,
             crop_history_length=history_frames,
         )
         output = model.motion_rep.inverse(motion, is_normalized=True)
-
-    # G1: postprocessing is disabled (does not work well for this model).
-    use_postprocess = "g1" not in resolved_model.lower() and not args.no_postprocess
-    if use_postprocess:
-        corrected = post_process_motion(
-            output["local_rot_mats"],
-            output["root_positions"],
-            output["foot_contacts"],
-            model.skeleton,
-            constraint_lst=constraint_lst or None,
-        )
-        output.update(corrected)
-
-    # Convert SOMA output to somaskel77 for external API
-    if isinstance(model.skeleton, SOMASkeleton30):
-        output = model.skeleton.output_to_SOMASkeleton77(output)
 
     output = to_numpy(output)
 
@@ -300,20 +242,19 @@ def main():
                 text,
             )
 
-    # Save the CSV output (MuJoCo qpos) for G1
-    if "g1" in resolved_model.lower():
-        from ardy.exports.mujoco import MujocoQposConverter
+    # Save MuJoCo qpos for the G1 controller path.
+    from ardy.exports.mujoco import MujocoQposConverter
 
-        converter = MujocoQposConverter(model.skeleton)
-        qpos = converter.dict_to_qpos(output, device)
-        if n_samples == 1:
-            csv_path = _single_file_path(output_base, ".csv")
-            print(f"Saving the csv output to {csv_path}")
-            converter.save_csv(qpos, csv_path)
-        else:
-            out_dir, _, base_name = _output_dir_and_path(output_base, "qpos", ".csv")
-            print(f"Saving the csv output to {out_dir}/ ({base_name}_00.csv ...)")
-            converter.save_csv(qpos, os.path.join(out_dir, base_name + ".csv"))
+    converter = MujocoQposConverter(model.skeleton)
+    qpos = converter.dict_to_qpos(output, device)
+    if n_samples == 1:
+        csv_path = _single_file_path(output_base, ".csv")
+        print(f"Saving the csv output to {csv_path}")
+        converter.save_csv(qpos, csv_path)
+    else:
+        out_dir, _, base_name = _output_dir_and_path(output_base, "qpos", ".csv")
+        print(f"Saving the csv output to {out_dir}/ ({base_name}_00.csv ...)")
+        converter.save_csv(qpos, os.path.join(out_dir, base_name + ".csv"))
 
 
 if __name__ == "__main__":

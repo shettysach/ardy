@@ -6,10 +6,9 @@
 Released models are organized by skeleton and generation horizon (in frames).
 ``load_model`` accepts:
 
-- a skeleton nickname (``"core"``, ``"g1"``, ``"soma"``) — resolves to that
-  skeleton's default horizon (see ``DEFAULT_HORIZON``),
-- a skeleton+horizon nickname (``"core8"``, ``"g152"``, ``"soma60"``),
-- the full folder / repo name (``"ARDY-SOMA-RP-30FPS-Horizon60"``).
+- the G1 nickname (``"g1"``) — resolves to its default horizon,
+- a G1+horizon nickname (``"g18"`` or ``"g152"``),
+- the full G1 folder / repo name.
 """
 
 import os
@@ -21,21 +20,16 @@ HF_ORG = "nvidia"
 # skeleton -> generation horizon (frames) -> released folder name
 # (the folder name is also the HF repo name under HF_ORG).
 MODELS_BY_SKELETON = {
-    "core": {
-        40: "ARDY-Core-RP-20FPS-Horizon40",
-        8: "ARDY-Core-RP-20FPS-Horizon8",
-    },
     "g1": {
         52: "ARDY-G1-RP-25FPS-Horizon52",
         8: "ARDY-G1-RP-25FPS-Horizon8",
     },
 }
 
-# Horizon a bare skeleton nickname resolves to ("core" -> "core40").
-DEFAULT_HORIZON = {"core": 40, "g1": 52, "soma": 60}
+# Horizon the bare G1 nickname resolves to.
+DEFAULT_HORIZON = {"g1": 52}
 
-# nickname -> released folder name: "core8"/"core40"/... plus the bare
-# skeleton names, which map to their DEFAULT_HORIZON variant.
+# G1 nickname -> released folder name, plus the bare default-horizon nickname.
 MODELS = {
     f"{skeleton}{horizon}": folder
     for skeleton, by_horizon in MODELS_BY_SKELETON.items()
@@ -43,7 +37,7 @@ MODELS = {
 }
 MODELS.update({skeleton: MODELS_BY_SKELETON[skeleton][DEFAULT_HORIZON[skeleton]] for skeleton in MODELS_BY_SKELETON})
 
-DEFAULT_MODEL = "core"
+DEFAULT_MODEL = "g1"
 DEFAULT_TEXT_ENCODER_URL = "http://127.0.0.1:9550/"
 
 # --- Aliases kept for imports elsewhere (ardy.model.loading re-exports these) --
@@ -54,14 +48,14 @@ AVAILABLE_MODELS = list(MODELS) + list(dict.fromkeys(MODELS.values()))
 ARDY_MODELS = list(MODELS)
 TMR_MODELS: list[str] = []
 
-# Released-style folder name, e.g. "ARDY-Core-RP-20FPS-Horizon40".
-_NAME_PATTERN = re.compile(r"ardy-(core|g1|soma)-.*horizon(\d+)$", re.IGNORECASE)
+# Released-style G1 folder name.
+_NAME_PATTERN = re.compile(r"ardy-(g1)-.*horizon(\d+)$", re.IGNORECASE)
 
 
 def parse_model_name(folder: str):
     """``(skeleton, horizon)`` parsed from a released-style folder name.
 
-    Returns e.g. ``("core", 40)`` for ``"ARDY-Core-RP-20FPS-Horizon40"`` (case-insensitive), or
+    Returns e.g. ``("g1", 52)`` for ``"ARDY-G1-RP-25FPS-Horizon52"`` (case-insensitive), or
     ``None`` when the name does not follow the released naming scheme (e.g. a local training-run
     folder).
     """
@@ -74,9 +68,9 @@ def parse_model_name(folder: str):
 def resolve_model_name(name: str, default_family=None, checkpoints_dir=None) -> str:
     """Return the released folder / repo name for a nickname or full name.
 
-    Accepts a nickname (``"soma"``, ``"core8"``), the full folder name (``"ARDY-SOMA-RP-30FPS-
-    Horizon60"``, case-insensitive), or a full HF repo id (``"nvidia/ARDY-SOMA-RP-30FPS-
-    Horizon60"``). ``default_family`` is ignored (kept for call-site compatibility).
+    Accepts a nickname (``"g1"``, ``"g18"``, or ``"g152"``), the full G1
+    folder name (case-insensitive), or a full HF repo id. ``default_family``
+    is ignored (kept for call-site compatibility).
 
     When ``checkpoints_dir`` is given, the valid model set is whatever folders live there — not just
     the released models — so a name matching a folder in it is accepted as-is (nicknames still
