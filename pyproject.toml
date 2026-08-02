@@ -26,8 +26,7 @@ dependencies = [
   # Keep the upstream-tested 1.25 API while dependency compatibility is being
   # changed independently of the inference implementation.
   "vector-quantize-pytorch>=1.25,<1.26",
-  # Checkpoint download / loading
-  "huggingface_hub>=1.0",
+  # Checkpoint loading
   "safetensors>=0.4",
   # Client for an existing standalone text-encoder service.
   "gradio_client>=2.0",

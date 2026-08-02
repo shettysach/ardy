@@ -32,8 +32,8 @@ authenticate with Hugging Face before the first run. The existing
 `TEXT_ENCODERS_DIR`, and `HUGGINGFACE_CACHE_DIR` environment variables remain
 supported.
 
-G1 checkpoints are downloaded from Hugging Face automatically. To use a local
-checkpoint, place the released folder below a checkpoint directory and pass
+G1 checkpoints must be supplied locally; ARDY does not download them at
+runtime. Place the released folder below a checkpoint directory and pass
 `--checkpoints_dir` (or set `CHECKPOINTS_DIR`):
 
 ```text
@@ -54,6 +54,7 @@ MuJoCo qpos CSV:
 python scripts/generate.py \
   "A person walks forward." \
   --model g1 \
+  --checkpoints_dir /path/to/checkpoints \
   --duration 5 \
   --output walk
 ```

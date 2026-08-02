@@ -82,7 +82,7 @@ def parse_args():
         "--checkpoints_dir",
         type=str,
         default=None,
-        help="Local dir holding released model folders. Falls back to the CHECKPOINTS_DIR env var; if neither is set the model is downloaded from Hugging Face.",
+        help="Required local dir holding released model folders. Falls back to the CHECKPOINTS_DIR environment variable.",
     )
     return parser.parse_args()
 

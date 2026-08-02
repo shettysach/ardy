@@ -1,12 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Load Ardy diffusion models from local checkpoints or Hugging Face."""
+"""Load Ardy diffusion models from local checkpoints."""
 
 from pathlib import Path
 from typing import Optional
 
 import torch
-from huggingface_hub import snapshot_download
 from omegaconf import OmegaConf
 
 from .loading import (
@@ -15,7 +14,7 @@ from .loading import (
     get_env_var,
     instantiate_from_dict,
 )
-from .registry import hf_repo_id, resolve_model_name
+from .registry import resolve_model_name
 
 DEFAULT_TEXT_ENCODER = "llm2vec"
 TEXT_ENCODER_PRESETS = {
@@ -30,21 +29,6 @@ TEXT_ENCODER_PRESETS = {
         },
     }
 }
-
-
-def _download_from_hf(full_name: str) -> Path:
-    """Download a released model from Hugging Face; returns the local snapshot dir.
-
-    With LOCAL_CACHE=true, tries the local HF cache first and falls back online.
-    """
-    repo_id = hf_repo_id(full_name)
-    local_cache = get_env_var("LOCAL_CACHE", "False").lower() == "true"
-    if local_cache:
-        try:
-            return Path(snapshot_download(repo_id=repo_id, local_files_only=True))
-        except Exception:
-            pass  # cache miss -> download online below
-    return Path(snapshot_download(repo_id=repo_id))
 
 
 def _build_api_text_encoder_conf(text_encoder_url: str) -> dict:
@@ -170,10 +154,9 @@ def load_model(
 ):
     """Load a released Ardy model.
 
-    ``modelname`` may be a G1 nickname or a full G1 checkpoint folder name. If
-    a local checkpoints dir is given (via
-    ``checkpoints_dir`` or the ``CHECKPOINTS_DIR`` env var) the model is loaded
-    from ``<checkpoints_dir>/<full_name>``; otherwise it is downloaded from HF.
+    ``modelname`` may be a G1 nickname or a full G1 checkpoint folder name.
+    Models are always loaded from ``<checkpoints_dir>/<full_name>``; provide the
+    directory explicitly or through the ``CHECKPOINTS_DIR`` environment variable.
 
     Args:
         modelname: Short key or full folder name; uses DEFAULT_MODEL if None.
@@ -191,8 +174,8 @@ def load_model(
         text_encoder_url: URL of the remote text-encoder service. When None,
             falls back to the TEXT_ENCODER_URL env var.
         checkpoints_dir: Local dir holding released model folders. When None,
-            falls back to the CHECKPOINTS_DIR env var; if neither is set the
-            model is downloaded from Hugging Face.
+            falls back to the CHECKPOINTS_DIR environment variable. One of
+            these is required; ARDY never downloads checkpoints at runtime.
 
     Returns:
         Loaded model in eval mode, or (model, confg)  if return_config is true
@@ -204,17 +187,17 @@ def load_model(
     if modelname is None:
         modelname = DEFAULT_MODEL
 
-    # Local dir if CHECKPOINTS_DIR is set (arg or env), otherwise download from HF.
     checkpoints_dir = checkpoints_dir or get_env_var("CHECKPOINTS_DIR")
+    if not checkpoints_dir:
+        raise ValueError(
+            "A local checkpoint directory is required. Pass checkpoints_dir or set CHECKPOINTS_DIR."
+        )
     # Resolve after checkpoints_dir so local-only folders are accepted when
     # loading from a local dir.
     full_name = resolve_model_name(modelname, checkpoints_dir=checkpoints_dir)
-    if checkpoints_dir:
-        model_path = Path(checkpoints_dir) / full_name
-        if not model_path.exists():
-            raise FileNotFoundError(f"Model {full_name!r} not found under CHECKPOINTS_DIR {checkpoints_dir!r}.")
-    else:
-        model_path = _download_from_hf(full_name)
+    model_path = Path(checkpoints_dir) / full_name
+    if not model_path.exists():
+        raise FileNotFoundError(f"Model {full_name!r} not found under CHECKPOINTS_DIR {checkpoints_dir!r}.")
 
     model_config_path = model_path / "config.yaml"
     if not model_config_path.exists():
