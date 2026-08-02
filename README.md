@@ -17,8 +17,8 @@ G1 checkpoint config and weights
 
 ## Setup
 
-ARDY requires Python 3.10 or newer. Install a PyTorch build appropriate for the
-machine first, then install this repository:
+ARDY requires Python 3.10 or newer, NumPy 2.4, and PyTorch 2.7 or newer. Install
+a PyTorch build appropriate for the machine first, then install this repository:
 
 ```bash
 pip install torch

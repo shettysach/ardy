@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """ARDY model package: main model class, text encoders, and loading utilities."""
 
+from typing import TYPE_CHECKING
+
 from .ardy_model import Ardy
-from .llm2vec import LLM2VecEncoder
 from .load_model import load_model
 from .loading import (
     AVAILABLE_MODELS,
@@ -13,16 +14,26 @@ from .loading import (
     load_checkpoint_state_dict,
 )
 
-# from .twostage_denoiser import TwostageDenoiser
+if TYPE_CHECKING:
+    from .llm2vec import LLM2VecEncoder
 
 __all__ = [
-    "Ardy",
-    "LLM2VecEncoder",
-    # "TwostageDenoiser",
-    "load_model",
-    "load_checkpoint_state_dict",
     "AVAILABLE_MODELS",
     "DEFAULT_MODEL",
     "DEFAULT_TEXT_ENCODER_URL",
     "MODEL_NAMES",
+    "Ardy",
+    "LLM2VecEncoder",
+    "load_checkpoint_state_dict",
+    "load_model",
 ]
+
+
+def __getattr__(name: str):
+    """Load the heavyweight local text encoder only when it is requested."""
+    if name == "LLM2VecEncoder":
+        from .llm2vec import LLM2VecEncoder
+
+        globals()[name] = LLM2VecEncoder
+        return LLM2VecEncoder
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

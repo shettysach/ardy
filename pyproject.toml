@@ -15,22 +15,16 @@ dependencies = [
   "omegaconf>=2.3",
   "pydantic>=2.0",
   # Core numerics
-  "numpy>=1.23,<2",
-  "scipy>=1.10",
+  "numpy>=2.4.0,<2.5",
+  "scipy>=1.18",
   # Inference stack
-  # NGC containers ship torch as a prerelease (e.g. pytorch:24.07-py3 has
-  # 2.4.0a0+...nv24.07, which sorts BELOW 2.4.0). The floor must include the
-  # a0 tag, otherwise pip replaces the container's torch with a PyPI wheel
-  # and breaks the container's matched PyTorch runtime.
-  "torch>=2.4.0a0",
+  "torch>=2.7.0",
   # NOTE: the vendored ardy/model/llm2vec has only been tested with transformers==5.8.1
   "transformers==5.8.1",
   "peft>=0.19",
   "einops>=0.7",
-  # Capped below 1.26: vector-quantize-pytorch>=1.26 declares torch>=2.4,
-  # which the NGC prerelease torch (2.4.0a0) does NOT satisfy, so pip would
-  # replace the container's torch. 1.25.x only needs torch>=2.0, and we only
-  # use FSQ, whose API is unchanged. Revisit when moving to a newer container.
+  # Keep the upstream-tested 1.25 API while dependency compatibility is being
+  # changed independently of the inference implementation.
   "vector-quantize-pytorch>=1.25,<1.26",
   # Checkpoint download / loading
   "huggingface_hub>=1.0",
