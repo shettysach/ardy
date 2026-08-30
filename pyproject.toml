@@ -19,6 +19,10 @@ dependencies = [
   "scipy>=1.18",
   # Inference stack
   "torch>=2.7.0",
+  "transformers>=4.51",
+  "peft>=0.19",
+  "accelerate>=1.0",
+  "bitsandbytes>=0.50.0",
   "einops>=0.7",
   # Keep the upstream-tested 1.25 API while dependency compatibility is being
   # changed independently of the inference implementation.

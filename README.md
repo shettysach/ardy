@@ -25,12 +25,16 @@ pip install torch
 pip install -e .
 ```
 
-This fork does not understand text and contains no text encoder. Its released G1
-checkpoint requires the pooled LLM2Vec representation it was trained on:
-`text_feat` is floating-point `[B, 1, 4096]` and `text_pad_mask` is boolean
-`[B, 1]`. Supply these from the separate encoder service as an NPZ with those
-two keys. Other embedding models cannot be substituted merely by matching the
-shape.
+This fork includes a checkpoint-compatible LLM2Vec encoder for the supported
+AeroEx merged checkpoints: `Aero-Ex/KIMODO-Meta3_llm2vec_FP16` and
+`Aero-Ex/KIMODO-Meta3_llm2vec_NF4`. Use
+`ardy.model.llm2vec.LLM2VecEncoder(model_path, device=...)` to obtain the
+pooled `[4096]` float32 representation the released G1 checkpoint expects.
+Thanks to [Aero-Ex](https://huggingface.co/Aero-Ex) for providing the
+quantized encoder checkpoints.
+The motion model itself remains embedding-conditioned: `text_feat` is
+floating-point `[B, 1, 4096]` and `text_pad_mask` is boolean `[B, 1]`.
+Other embedding models cannot be substituted merely by matching the shape.
 
 G1 checkpoints must be supplied locally; This fork does not download them at
 runtime. Place the released folder below a checkpoint directory and pass
